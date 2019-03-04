@@ -1,6 +1,7 @@
 from PIL import Image
 from random import choice
 import argparse
+from time import time
 
 
 class ElevationMap:
@@ -21,10 +22,10 @@ class ElevationMap:
         self.elevation_range = self.max_elevation - self.min_elevation
         self.width = len(self.elevation_graph[0])
         self.height = len(self.elevation_graph)
-        self.coords_dict = {}
-        for y in range(self.height):
-            for x in range(self.width):
-                self.coords_dict[(x, y)] = self.elevation_graph[y][x]
+        # self.coords_dict = {}
+        # for y in range(self.height):
+        #     for x in range(self.width):
+        #         self.coords_dict[(x, y)] = self.elevation_graph[y][x]
 
     def get_elevation(self, x, y):
         """Returns the elevation at a given x, y coordinate."""
@@ -119,6 +120,11 @@ class PathFinder:
         for i in range(len(path)-1):
             total_ediff += self.emap.get_diff(path[i][0], path[i][1], path[i+1][0], path[i+1][1])
         return total_ediff
+    
+    def find_best_path(self, x, y):
+        """Given a coordinate, find the path with the least elevation change from that coordinate
+        to the right side of the map"""
+        pass
 
 
 if __name__ == "__main__":
@@ -126,10 +132,28 @@ if __name__ == "__main__":
     parser.add_argument("file", help = "The file path for the elevation map data")
     args = parser.parse_args()
 
+    emapinit_time = time()
     emap = ElevationMap(args.file)
+    print(f"Emap Init: {time()-emapinit_time}")
+
+    pdrawerinit_time = time()
     point_drawer = PointDrawer()
+    print(f"Pdrawer Init: {time()-pdrawerinit_time}")
+
+    drawemap_time = time()
     my_image = point_drawer.draw_emap(emap)
+    print(f"Draw Emap: {time()-drawemap_time}")
+
+    pfinderinit_time = time()
     pathfinder = PathFinder(emap)
+    print(f"Pfinder Init: {time()-pfinderinit_time}")
+
+    findgreediestpath_time = time()
     greedy_path = pathfinder.find_greediest_path(range(emap.height))
+    print(f"Find Greediest Path: {time()-findgreediestpath_time}")
+
+    drawpath_time = time()
     point_drawer.draw_path(greedy_path, my_image, (0,255,0))
+    print(f"Draw Path: {time()-drawpath_time}")
+
     my_image.save("my_pretty_mountain.png")
