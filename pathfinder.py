@@ -1,8 +1,14 @@
 from PIL import Image
 from random import choice
+import argparse
 
 
 class ElevationMap:
+    """
+    An elevation map takes a text file with each line having numerical values representing elevations separated
+    by spaces.  It strips that data into lists and dictionaries and stores important values about the map.
+    Has useful methods for getting elevation data for each coordinate.
+    """
 
 
     def __init__(self, file):
@@ -21,64 +27,109 @@ class ElevationMap:
                 self.coords_dict[(x, y)] = self.elevation_graph[y][x]
 
     def get_elevation(self, x, y):
+        """Returns the elevation at a given x, y coordinate."""
         return self.elevation_graph[y][x]
 
     def get_elevation_intensity(self, x, y, scale):
+        """Given an x, y coordinate, represent the elevation as a ratio of the range of given elevations,
+        and then scale it to the given scale. ie: range of elevations = 200-300, scale = 1000, elevation
+        at the given point is 233, return 330."""
         return int(((self.get_elevation(x, y) - self.min_elevation) / self.elevation_range) * scale)
 
-    def get_elevation_difference(self, x, y, a, b):
+    def get_diff(self, x, y, a, b):
+        """Given two coordinate, return the difference in elevations at each coordinate."""
         return abs(self.get_elevation(x, y)-self.get_elevation(a, b))
-
-    def draw_elevation_map(self):
-        my_mountain = Image.new('RGB', (len(self.elevation_graph), len(self.elevation_graph[0])), (255,255,255))
-        for y in range(len(self.elevation_graph)):
-            for x in range(len(self.elevation_graph[0])):
-                rgb_value = self.get_elevation_intensity(x, y, 255)
-                my_mountain.putpixel((x, y), (rgb_value, rgb_value, rgb_value))
-        return my_mountain
-
-    def find_best_way_forward(self, x, y):
-        if y == 0:
-            options = {(x+1, y):self.get_elevation_difference(x,y,x+1,y),(x+1, y+1):self.get_elevation_difference(x,y,x+1,y+1)}
-        elif y == self.height - 1:
-            options = {(x+1, y-1):self.get_elevation_difference(x,y,x+1,y-1),(x+1, y):self.get_elevation_difference(x,y,x+1,y)}
-        else:
-            options = {(x+1, y-1):self.get_elevation_difference(x,y,x+1,y-1),(x+1, y):self.get_elevation_difference(x,y,x+1,y),(x+1, y+1):self.get_elevation_difference(x,y,x+1,y+1)}
-        best_option = (x+1, y)
-        best_option = min(options, key = options.__getitem__)
-        if (len(options) == 3) and (not best_option == (x+1, y)) and (options[(x+1,y-1)] == options[(x+1,y+1)]):
-            best_option = choice([(x+1, y-1), (x+1, y+1)])
-        return best_option, self.get_elevation_difference(x,y,best_option[0],best_option[1])
-
-    def draw_greedy_path(self, y_value):
-        my_mountain_image = self.draw_elevation_map()
-        total_elevation_changes = {}
-        for start_y in y_value:
-            y = start_y
-            total_elevation_change = 0
-            for x in range(len(self.elevation_graph[0])-1):
-                best_way_forward, elevation_change = self.find_best_way_forward(x,y)
-                my_mountain_image.putpixel(best_way_forward, (240,240,240))
-                y = best_way_forward[1]
-                total_elevation_change += elevation_change
-            total_elevation_changes[start_y] = total_elevation_change
-        min_elevation_change_y = sorted(total_elevation_changes, key = total_elevation_changes.__getitem__)[0]
-        for x in range(len(self.elevation_graph[0])-1):
-            best_way_forward = self.find_best_way_forward(x,min_elevation_change_y)[0]
-            my_mountain_image.putpixel(best_way_forward, (0,255,0))
-            min_elevation_change_y = best_way_forward[1]
-        return my_mountain_image
 
 
 class PointDrawer:
+    """
+    A PointDrawer has methods to represent elevation maps as images and 
+    draw paths of coordinates on images.
+    """
 
 
-    def __init__(self, elevation_map):
-        self.elevation_map = elevation_map
+    def __init__(self):
+        pass
+
+    def draw_emap(self, emap):
+        """Given an ElevationMap, draw each point in gray scale with an intensity that matches its
+        percentage of the total range of elevation.  Higher points == lighter, lower points == darker."""
+        my_mountain = Image.new('RGB', (emap.width, emap.height), (255,255,255))
+        for y in range(emap.height):
+            for x in range(emap.width):
+                rgb_value = emap.get_elevation_intensity(x, y, 255)
+                my_mountain.putpixel((x, y), (rgb_value, rgb_value, rgb_value))
+        return my_mountain
+
+    def draw_path(self, path, image, rgb):
+        """Given a list of coordinates (path), draw a pixel on an image with the rgb value given."""
+        for coord in path:
+            image.putpixel(coord, rgb)
 
 
-my_mountain = ElevationMap("elevation_small.txt")
-my_image = my_mountain.draw_greedy_path(range(600))
-my_image.save("my_pretty_mountain.png")
+class PathFinder:
+    """
+    A PathFinder takes an ElevationMap as its main argument.  It has methods to find 'paths of least resistance'
+    from different points on the map.
+    """
 
 
+    def __init__(self, emap):
+        self.emap=emap
+
+    def find_greedy_step(self, x, y):
+        """Given a coordinate, return a coordinate to the right and either up, straight, or down
+        one from the starting coordinate that causes the least change in elevation."""
+        if y == 0:
+            options = [y,y+1]
+            diffs = [self.emap.get_diff(x,y,x+1,y),self.emap.get_diff(x,y,x+1,y+1)]
+        elif y == self.emap.height - 1:
+            options = [y,y-1]
+            diffs = [self.emap.get_diff(x,y,x+1,y),self.emap.get_diff(x,y,x+1,y-1)]
+        else:
+            options = [y,y-1,y+1]
+            diffs = [self.emap.get_diff(x,y,x+1,y),self.emap.get_diff(x,y,x+1,y-1),self.emap.get_diff(x,y,x+1,y+1)]
+        best_option_index = diffs.index(min(diffs))
+        best_option = options[best_option_index]
+        if best_option_index>0 and len(options)==3 and diffs[1]==diffs[2]:
+            best_option = choice([y+1, y-1])
+        return (x+1, best_option)
+
+    def find_greedy_path(self, y):
+        """Given a starting y value, return a list of coordinates that represents the path where each step
+        is the step that causes the least change in elevation."""
+        greedy_path = [(0, y)]
+        for x in range(self.emap.width-1):
+            best_way_forward = self.find_greedy_step(x,y)
+            greedy_path.append(best_way_forward)
+            y = best_way_forward[1]
+        return greedy_path
+
+    def find_greediest_path(self, y_range):
+        """Given a range of y values, generates a list of greedy paths using each y value as a starting point,
+        and then returns the path with the least total change in elevation."""
+        paths = [self.find_greedy_path(y) for y in y_range]
+        min_path = min(paths, key=lambda k: self.get_path_ediff(k))
+        return min_path
+        
+    def get_path_ediff(self, path):
+        """Given a path (ordered list of coordinates), return the sum of the difference
+        in elevation between each step of the path."""
+        total_ediff = 0
+        for i in range(len(path)-1):
+            total_ediff += self.emap.get_diff(path[i][0], path[i][1], path[i+1][0], path[i+1][1])
+        return total_ediff
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("file", help = "The file path for the elevation map data")
+    args = parser.parse_args()
+
+    emap = ElevationMap(args.file)
+    point_drawer = PointDrawer()
+    my_image = point_drawer.draw_emap(emap)
+    pathfinder = PathFinder(emap)
+    greedy_path = pathfinder.find_greediest_path(range(emap.height))
+    point_drawer.draw_path(greedy_path, my_image, (0,255,0))
+    my_image.save("my_pretty_mountain.png")
